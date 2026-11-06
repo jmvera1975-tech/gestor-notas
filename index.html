@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Gestor de Notas</title>
+<meta name="description" content="Consolida las notas de hasta 50 estudiantes, calcula la definitiva y genera la lista para Registro Académico.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600&display=swap" rel="stylesheet">
+<style>
+/* Concepto: libro de calificaciones. Una sola tabla densa, números en monoespaciada, estados con color semántico. */
+:root{
+  --bg:#f2f4f7; --surface:#ffffff; --field:#f7f9fb;
+  --ink:#17202b; --muted:#566274; --line:#d8dee6;
+  --accent:#1d4f91; --accent-ink:#ffffff;
+  --ok:#17703f; --ok-bg:#e1f2e8;
+  --bad:#b0271f; --bad-bg:#fbe5e3;
+  --warn:#7a5200; --warn-bg:#fcefd0;
+  --f-display:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f151c; --surface:#171f29; --field:#1d2733;
+    --ink:#e6ebf1; --muted:#9aa7b6; --line:#2b3643;
+    --accent:#6aa6f0; --accent-ink:#0b1a2c;
+    --ok:#5fd096; --ok-bg:#153423;
+    --bad:#ff8f86; --bad-bg:#3b1b19;
+    --warn:#e8b95a; --warn-bg:#3a2d0e;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body)}
+.page{max-width:1120px;margin:0 auto;padding-block:28px 56px;padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px))}
+h1{font:600 clamp(1.7rem,4vw,2.3rem)/1.1 var(--f-display);margin:0;text-wrap:balance}
+.sub{margin:6px 0 0;color:var(--muted);max-width:60ch}
+.rules{margin-top:18px;display:grid;gap:8px}
+.rules-line{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:.85rem;color:var(--muted)}
+.rules-line b{color:var(--ink);font-weight:600}
+.wbar{display:flex;height:30px;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--surface)}
+.wbar span{display:flex;align-items:center;justify-content:center;gap:6px;font-size:.78rem;font-weight:500;white-space:nowrap;overflow:hidden;color:var(--ink);border-right:1px solid var(--surface)}
+.wbar span:last-child{border-right:0}
+.wbar i{font-style:normal;font-family:var(--f-num);font-weight:600}
+.wbar .s0{background:color-mix(in srgb,var(--accent) 14%,var(--surface))}
+.wbar .s1{background:color-mix(in srgb,var(--accent) 24%,var(--surface))}
+.wbar .s2{background:color-mix(in srgb,var(--accent) 36%,var(--surface))}
+.wbar .s3{background:color-mix(in srgb,var(--accent) 56%,var(--surface))}
+@media (max-width:560px){.wbar span em{display:none}}
+
+.meta{margin-top:22px;display:grid;grid-template-columns:2fr 2fr 1fr 1fr 1fr;gap:12px}
+@media (max-width:860px){.meta{grid-template-columns:1fr 1fr}.meta .f-course{grid-column:1/-1}}
+label.f{display:grid;gap:4px;font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500;min-width:0}
+.meta input,.meta select{font:inherit;font-size:.95rem;letter-spacing:0;text-transform:none;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:8px 10px;min-width:0;width:100%}
+
+.demo{margin-top:18px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;background:var(--warn-bg);color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);border-radius:4px;padding:10px 14px;font-size:.9rem}
+.demo[hidden]{display:none}
+
+.stats{margin-top:20px;display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+.stat{flex:1 1 120px;padding:10px 14px;border-right:1px solid var(--line);min-width:0}
+.stat:last-child{border-right:0}
+@media (max-width:700px){.stat{border-bottom:1px solid var(--line)}}
+.stat small{display:block;font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.stat b{font:600 1.25rem/1.3 var(--f-num);font-variant-numeric:tabular-nums}
+.stat.ok b{color:var(--ok)} .stat.bad b{color:var(--bad)} .stat.warn b{color:var(--warn)}
+
+.bar{margin-top:22px;display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center}
+.bar .count{font:500 .9rem var(--f-num);color:var(--muted);margin-right:4px}
+.bar .grow{flex:1}
+button{font:inherit;font-size:.9rem;font-weight:500;border-radius:4px;padding:8px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+button:hover:not(:disabled){border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.primary:hover:not(:disabled){filter:brightness(1.08)}
+button:disabled{opacity:.5;cursor:not-allowed}
+button.danger.armed{background:var(--bad);border-color:var(--bad);color:#fff}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+details.paste{margin-top:12px;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+details.paste summary{cursor:pointer;padding:9px 14px;font-weight:500;font-size:.9rem}
+details.paste .in{padding:0 14px 14px;display:grid;gap:10px}
+details.paste p{margin:0;color:var(--muted);font-size:.85rem}
+details.paste textarea{width:100%;min-height:110px;font:.9rem var(--f-num);color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:4px;padding:8px 10px;resize:vertical}
+
+.notice{margin-top:12px;font-size:.88rem;color:var(--warn);min-height:1.3em}
+.notice.badtxt{color:var(--bad)}
+
+.wrap{margin-top:8px;overflow-x:auto;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+table{width:100%;border-collapse:collapse;min-width:820px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+thead th{font-size:.74rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--field);white-space:nowrap}
+thead th .w{display:block;font:600 .8rem var(--f-num);letter-spacing:0;color:var(--accent)}
+th.c,td.gc,td.def{text-align:center}
+td.idx{width:2.4rem;color:var(--muted);font:.8rem var(--f-num);text-align:right;padding-right:6px}
+td.act{width:2.4rem;text-align:center}
+tbody tr:hover{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+td input{font:inherit;font-size:.92rem;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:3px;padding:6px 8px;width:100%;min-width:0}
+td input.cod{width:7.5rem;font-family:var(--f-num);font-size:.85rem}
+td input.g{width:4.6rem;text-align:center;font:600 .95rem var(--f-num);font-variant-numeric:tabular-nums}
+td input.bad{border-color:var(--bad);background:var(--bad-bg);color:var(--bad)}
+td input:focus{border-color:var(--accent)}
+td.def{font:600 1.05rem var(--f-num);font-variant-numeric:tabular-nums;width:5.5rem}
+td.def.aprueba{color:var(--ok)} td.def.reprueba{color:var(--bad)} td.def.pendiente,td.def.invalido{color:var(--muted)}
+td.est{min-width:11rem}
+.chip{display:inline-block;font-size:.78rem;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap}
+.chip.ok{background:var(--ok-bg);color:var(--ok)} .chip.bad{background:var(--bad-bg);color:var(--bad)}
+.chip.warn{background:var(--warn-bg);color:var(--warn)} .chip.muted{background:var(--field);color:var(--muted);border:1px solid var(--line)}
+.hint{display:block;font-size:.76rem;color:var(--muted);margin-top:2px}
+.hint.badtxt{color:var(--bad)}
+button.del{border:0;background:transparent;color:var(--muted);font-size:1.15rem;line-height:1;padding:4px 8px}
+button.del:hover:not(:disabled){color:var(--bad)}
+button.del.armed{background:var(--bad);color:#fff;font-size:.75rem;font-weight:600;padding:4px 8px;border-radius:3px}
+tfoot td{background:var(--field);font:600 .85rem var(--f-num);color:var(--muted);text-align:center;border-bottom:0}
+tfoot td.lbl{text-align:right;font:500 .74rem var(--f-body);letter-spacing:.05em;text-transform:uppercase}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+.foot{margin-top:18px;font-size:.82rem;color:var(--muted);max-width:75ch}
+.print-only{display:none}
+
+@media print{
+  :root{--bg:#fff;--surface:#fff;--field:#fff;--ink:#000;--muted:#333;--line:#999;--accent:#000;--ok:#000;--bad:#000;--warn:#000;--ok-bg:#fff;--bad-bg:#fff;--warn-bg:#fff;color-scheme:light}
+  body{background:#fff;font-size:11pt}
+  .page{max-width:none;padding:0}
+  .no-print{display:none!important}
+  .print-only{display:block!important}
+  .wrap{overflow:visible;border:0}
+  table{min-width:0}
+  td input,.meta input{border:0!important;background:none!important;padding:0!important;color:#000!important;font-size:10.5pt}
+  td input::placeholder{color:transparent}
+  .meta{grid-template-columns:2fr 2fr 1fr 1fr;margin-top:10px}
+  .meta .f-dec{display:none}
+  .chip{background:none!important;padding:0;color:#000!important;font-weight:600}
+  .stats{margin-top:10px}
+  tr{break-inside:avoid}
+  .sign{display:grid!important;grid-template-columns:1fr 1fr;gap:60px;margin-top:70px}
+  .sign div{border-top:1px solid #000;padding-top:4px;font-size:10pt}
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Gestor de notas</h1>
+    <p class="sub">Capture las notas del curso, obtenga la definitiva de cada estudiante y descargue o imprima la lista para Registro Académico.</p>
+    <div class="rules no-print">
+      <div class="wbar" id="wbar" role="img" aria-label="Ponderación de las evaluaciones"></div>
+      <div class="rules-line">
+        <span>Escala <b>0,0 a 5,0</b></span>
+        <span>Aprueba con <b>3,0</b> o más</span>
+        <span>Capacidad <b>50 estudiantes</b></span>
+      </div>
+    </div>
+    <div class="print-only"><h2 style="font:600 1.3rem var(--f-display);margin:14px 0 0">Acta de calificaciones</h2><div id="printDate" style="font-size:10pt"></div></div>
+  </header>
+
+  <section class="meta" aria-label="Datos del curso">
+    <label class="f f-course">Asignatura<input id="m-course" maxlength="80" autocomplete="off"></label>
+    <label class="f">Docente<input id="m-teacher" maxlength="80" autocomplete="off"></label>
+    <label class="f">Grupo<input id="m-group" maxlength="20" autocomplete="off"></label>
+    <label class="f">Periodo<input id="m-period" maxlength="20" placeholder="2026-2" autocomplete="off"></label>
+    <label class="f f-dec no-print">Decimales definitiva
+      <select id="m-dec"><option value="1">1 decimal (ej. 3,6)</option><option value="2">2 decimales (ej. 3,65)</option></select>
+    </label>
+  </section>
+
+  <div class="demo no-print" id="demo">
+    <span>Está viendo datos de ejemplo. Vacíelos para empezar con su propio curso.</span>
+    <button type="button" id="btnDemoClear">Vaciar ejemplo</button>
+  </div>
+
+  <section class="stats" id="stats" aria-label="Resumen del grupo">
+    <div class="stat"><small>Promedio del grupo</small><b id="s-avg">—</b></div>
+    <div class="stat ok"><small>Aprueban</small><b id="s-ok">0</b></div>
+    <div class="stat bad"><small>Reprueban</small><b id="s-bad">0</b></div>
+    <div class="stat warn"><small>Pendientes</small><b id="s-pen">0</b></div>
+    <div class="stat"><small>Más alta</small><b id="s-max">—</b></div>
+    <div class="stat"><small>Más baja</small><b id="s-min">—</b></div>
+    <div class="stat"><small>Aprobación</small><b id="s-pct">—</b></div>
+  </section>
+
+  <div class="bar no-print">
+    <span class="count" id="count">0 / 50</span>
+    <button type="button" class="primary" id="btnAdd">Agregar estudiante</button>
+    <span class="grow"></span>
+    <button type="button" id="btnCsv">Descargar CSV</button>
+    <button type="button" id="btnPrint">Imprimir acta</button>
+    <button type="button" class="danger" id="btnClear">Vaciar lista</button>
+  </div>
+
+  <details class="paste no-print">
+    <summary>Pegar lista de estudiantes</summary>
+    <div class="in">
+      <p>Una línea por estudiante. Use <b>código;nombre</b> o solo el nombre. También funciona pegar dos columnas desde Excel.</p>
+      <textarea id="pasteBox" placeholder="20261011;Ana María Gómez&#10;20261012;Carlos Pérez"></textarea>
+      <div><button type="button" id="btnPaste">Agregar a la lista</button></div>
+    </div>
+  </details>
+
+  <div class="notice no-print" id="notice" aria-live="polite"></div>
+
+  <div class="wrap">
+    <table>
+      <thead><tr id="thead"></tr></thead>
+      <tbody id="rows"></tbody>
+      <tfoot><tr id="tfoot"></tr></tfoot>
+    </table>
+    <div class="empty" id="empty" hidden>Todavía no hay estudiantes. Agregue uno o pegue una lista.</div>
+  </div>
+
+  <div class="sign print-only"><div>Firma del docente</div><div>Recibido por Registro Académico</div></div>
+
+  <p class="foot no-print">Los datos se guardan solo en este navegador. Descargue el CSV para respaldar o entregar. El archivo usa punto y coma y coma decimal, y se abre directo en Excel configurado en español.</p>
+</div>
+
+<script>
+const WEIGHTS=[
+  {label:'Parcial 1',w:15},
+  {label:'Parcial 2',w:20},
+  {label:'Parcial 3',w:25},
+  {label:'Examen final',w:40}
+];
+const MAX_STUDENTS=50, PASS=3, KEY='gestor-notas-v1';
+
+// <logic>
+function parseGrade(s){
+  s=String(s==null?'':s).trim().replace(',','.');
+  if(s==='') return {v:null,bad:false};
+  if(!/^\d+(\.\d{0,2})?$/.test(s)) return {v:null,bad:true};
+  const v=parseFloat(s);
+  if(!(v>=0&&v<=5)) return {v:null,bad:true};
+  return {v,bad:false};
+}
+function roundTo(x,d){const f=Math.pow(10,d);return Math.round(x*f+1e-9)/f;}
+function fmt(n,d){return n.toFixed(d).replace('.',',');}
+function compute(st,dec){
+  let earned=0,filled=0;
+  const vals=[],bad=[];
+  WEIGHTS.forEach((c,i)=>{
+    const r=parseGrade(st.g[i]);
+    vals.push(r.v);bad.push(r.bad);
+    if(r.v!==null){earned+=r.v*c.w/100;filled++;}
+  });
+  const out={vals,bad,earned,filled,def:null,status:'pendiente',label:'Pendiente',tone:filled===0?'muted':'warn',hint:'',hintBad:false};
+  if(bad.some(Boolean)){out.status='invalido';out.label='Revisar notas';out.tone='bad';return out;}
+  if(filled===4){
+    out.def=roundTo(earned,dec);
+    if(out.def>=PASS){out.status='aprueba';out.label='Aprueba';out.tone='ok';}
+    else{out.status='reprueba';out.label='Reprueba';out.tone='bad';}
+    return out;
+  }
+  if(vals[3]===null&&vals[0]!==null&&vals[1]!==null&&vals[2]!==null){
+    const thr=PASS-0.5/Math.pow(10,dec);
+    const need=(thr-earned)/(WEIGHTS[3].w/100);
+    if(need<=0) out.hint='Aprueba con cualquier nota en el final';
+    else if(need>5){out.hint='No alcanza el mínimo, ni con 5,0';out.hintBad=true;}
+    else out.hint='Necesita '+fmt(Math.ceil(need*100-1e-9)/100,2)+' en el final';
+  }
+  return out;
+}
+// </logic>
+
+const $=s=>document.querySelector(s);
+const tbody=$('#rows');
+let state=load();
+
+function demo(){
+  return {demo:true,
+    meta:{course:'Álgebra lineal (ejemplo)',teacher:'',group:'A',period:'2026-2',decimals:1},
+    students:[
+      {id:'20261001',name:'Valentina Ríos Herrera',g:['4,2','3,8','4,5','4,0']},
+      {id:'20261002',name:'Santiago Mejía Ortiz',g:['2,5','3,0','2,8','2,6']},
+      {id:'20261003',name:'Camila Andrade Pérez',g:['3,5','4,0','3,2','3,8']},
+      {id:'20261004',name:'Daniel Cárdenas Silva',g:['1,8','2,5','3,0','3,4']},
+      {id:'20261005',name:'Laura Sofía Quintero',g:['4,8','4,5','5,0','4,7']},
+      {id:'20261006',name:'Mateo Giraldo Ruiz',g:['3,0','3,2','2,9','']},
+      {id:'20261007',name:'Isabela Torres León',g:['4,0','3,6','','']},
+      {id:'20261008',name:'Juan Esteban Cano Vélez',g:['2,0','2,2','1,5','']}
+    ]};
+}
+function load(){
+  try{
+    const r=localStorage.getItem(KEY);
+    if(r){
+      const s=JSON.parse(r);
+      if(s&&Array.isArray(s.students)){
+        s.meta=Object.assign({course:'',teacher:'',group:'',period:'',decimals:1},s.meta||{});
+        s.students=s.students.slice(0,MAX_STUDENTS).map(x=>({id:String(x.id||''),name:String(x.name||''),g:[0,1,2,3].map(i=>String((x.g||[])[i]||''))}));
+        return s;
+      }
+    }
+  }catch(e){}
+  return demo();
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
+const dec=()=>state.meta.decimals===2?2:1;
+
+function chip(text,tone){const s=document.createElement('span');s.className='chip '+tone;s.textContent=text;return s;}
+
+function buildHead(){
+  $('#wbar').innerHTML=WEIGHTS.map((c,i)=>'<span class="s'+i+'" style="flex:'+c.w+'"><em style="font-style:normal">'+c.label+'</em><i>'+c.w+'%</i></span>').join('');
+  $('#thead').innerHTML='<th></th><th>Código</th><th>Nombre del estudiante</th>'+
+    WEIGHTS.map(c=>'<th class="c">'+c.label+'<span class="w">'+c.w+'%</span></th>').join('')+
+    '<th class="c">Definitiva</th><th>Estado</th><th class="no-print"></th>';
+  $('#tfoot').innerHTML='<td class="lbl" colspan="3">Promedio del grupo</td>'+WEIGHTS.map(()=>'<td class="avg"></td>').join('')+'<td class="avg"></td><td></td><td class="no-print"></td>';
+}
+
+function makeRow(st,i){
+  const tr=document.createElement('tr');
+  tr.dataset.i=i;
+  tr.innerHTML='<td class="idx"></td>'+
+    '<td><input class="cod" data-f="id" maxlength="20" aria-label="Código" autocomplete="off"></td>'+
+    '<td><input class="nom" data-f="name" maxlength="80" aria-label="Nombre del estudiante" autocomplete="off"></td>'+
+    WEIGHTS.map((c,k)=>'<td class="gc"><input class="g" data-f="'+k+'" inputmode="decimal" maxlength="4" aria-label="'+c.label+'" autocomplete="off"></td>').join('')+
+    '<td class="def"></td><td class="est"></td>'+
+    '<td class="act no-print"><button type="button" class="del" aria-label="Eliminar estudiante" title="Eliminar">×</button></td>';
+  tr.querySelector('[data-f="id"]').value=st.id;
+  tr.querySelector('[data-f="name"]').value=st.name;
+  tr.querySelectorAll('.g').forEach((el,k)=>{el.value=st.g[k];});
+  return tr;
+}
+function updateRow(tr){
+  const i=+tr.dataset.i, c=compute(state.students[i],dec());
+  tr.querySelector('.idx').textContent=i+1;
+  tr.querySelectorAll('.g').forEach((el,k)=>el.classList.toggle('bad',c.bad[k]));
+  const def=tr.querySelector('.def');
+  def.textContent=c.def===null?'—':fmt(c.def,dec());
+  def.className='def '+c.status;
+  const est=tr.querySelector('.est');
+  est.replaceChildren(chip(c.label,c.tone));
+  if(c.hint){const h=document.createElement('span');h.className='hint'+(c.hintBad?' badtxt':'');h.textContent=c.hint;est.appendChild(h);}
+}
+function buildRows(){
+  tbody.replaceChildren();
+  state.students.forEach((st,i)=>tbody.appendChild(makeRow(st,i)));
+  updateAll();
+}
+function updateAll(){
+  tbody.querySelectorAll('tr').forEach(updateRow);
+  updateStats();
+}
+function updateStats(){
+  const d=dec();
+  const cs=state.students.map(s=>compute(s,d));
+  const done=cs.filter(c=>c.def!==null);
+  const ap=done.filter(c=>c.status==='aprueba').length;
+  const rp=done.length-ap;
+  const pen=cs.filter(c=>c.status==='pendiente').length;
+  const inv=cs.filter(c=>c.status==='invalido').length;
+  const defs=done.map(c=>c.def);
+  $('#s-avg').textContent=defs.length?fmt(defs.reduce((a,b)=>a+b,0)/defs.length,2):'—';
+  $('#s-ok').textContent=ap;$('#s-bad').textContent=rp;$('#s-pen').textContent=pen;
+  $('#s-max').textContent=defs.length?fmt(Math.max(...defs),d):'—';
+  $('#s-min').textContent=defs.length?fmt(Math.min(...defs),d):'—';
+  $('#s-pct').textContent=defs.length?Math.round(ap/defs.length*100)+'%':'—';
+  const avgs=document.querySelectorAll('#tfoot .avg');
+  WEIGHTS.forEach((c,k)=>{
+    const v=cs.map(x=>x.vals[k]).filter(x=>x!==null);
+    avgs[k].textContent=v.length?fmt(v.reduce((a,b)=>a+b,0)/v.length,2):'—';
+  });
+  avgs[WEIGHTS.length].textContent=defs.length?fmt(defs.reduce((a,b)=>a+b,0)/defs.length,2):'—';
+  const n=state.students.length;
+  $('#count').textContent=n+' / '+MAX_STUDENTS;
+  $('#btnAdd').disabled=n>=MAX_STUDENTS;
+  $('#empty').hidden=n>0;
+  $('#btnCsv').disabled=n===0;
+  const nt=$('#notice');
+  nt.classList.toggle('badtxt',inv>0);
+  if(inv>0) nt.textContent=inv+(inv===1?' estudiante tiene':' estudiantes tienen')+' notas fuera del rango 0,0 a 5,0. Corríjalas antes de entregar.';
+  else if(pen>0) nt.textContent=pen+(pen===1?' estudiante tiene':' estudiantes tienen')+' notas incompletas y saldrán como Pendiente en la lista para Registro.';
+  else nt.textContent='';
+  $('#demo').hidden=!state.demo;
+}
+
+tbody.addEventListener('input',e=>{
+  const el=e.target, f=el.dataset.f; if(f===undefined) return;
+  const tr=el.closest('tr'), st=state.students[+tr.dataset.i];
+  if(f==='id'||f==='name') st[f]=el.value;
+  else{
+    const v=el.value.replace(/[^\d.,]/g,'');
+    if(v!==el.value) el.value=v;
+    st.g[+f]=v;
+  }
+  updateRow(tr);updateStats();save();
+});
+tbody.addEventListener('focusout',e=>{
+  const el=e.target;
+  if(!el.classList||!el.classList.contains('g')) return;
+  const r=parseGrade(el.value);
+  if(r.v!==null){
+    const t=el.value.trim().replace('.',',');
+    const tr=el.closest('tr');
+    el.value=t; state.students[+tr.dataset.i].g[+el.dataset.f]=t; save();
+  }
+});
+tbody.addEventListener('keydown',e=>{
+  const el=e.target, f=el.dataset&&el.dataset.f; if(f===undefined) return;
+  let dir=0;
+  if(e.key==='Enter'||e.key==='ArrowDown') dir=1; else if(e.key==='ArrowUp') dir=-1; else return;
+  e.preventDefault();
+  const tr=el.closest('tr'), next=dir>0?tr.nextElementSibling:tr.previousElementSibling;
+  if(next){const t=next.querySelector('[data-f="'+f+'"]');if(t){t.focus();t.select();}}
+});
+const armTimers=new WeakMap();
+function armed(btn,labelArmed,fn){
+  if(btn.classList.contains('armed')){
+    clearTimeout(armTimers.get(btn));
+    btn.classList.remove('armed');
+    if(btn.dataset.orig) btn.textContent=btn.dataset.orig;
+    fn();return;
+  }
+  btn.dataset.orig=btn.textContent;
+  btn.textContent=labelArmed;btn.classList.add('armed');
+  armTimers.set(btn,setTimeout(()=>{btn.classList.remove('armed');btn.textContent=btn.dataset.orig;},3000));
+}
+tbody.addEventListener('click',e=>{
+  const b=e.target.closest('button.del'); if(!b) return;
+  const i=+b.closest('tr').dataset.i;
+  armed(b,'¿Quitar?',()=>{state.students.splice(i,1);save();buildRows();});
+});
+$('#btnAdd').addEventListener('click',()=>{
+  if(state.students.length>=MAX_STUDENTS) return;
+  state.students.push({id:'',name:'',g:['','','','']});
+  save();buildRows();
+  const last=tbody.lastElementChild.querySelector('[data-f="name"]');
+  last.focus();last.scrollIntoView({block:'center'});
+});
+$('#btnClear').addEventListener('click',e=>{
+  armed(e.currentTarget,'¿Confirmar?',()=>{state.students=[];state.demo=false;save();buildRows();});
+});
+$('#btnDemoClear').addEventListener('click',()=>{
+  state.students=[];state.demo=false;
+  state.meta=Object.assign(state.meta,{course:'',teacher:'',group:'',period:''});
+  fillMeta();save();buildRows();
+});
+$('#btnPaste').addEventListener('click',()=>{
+  const lines=$('#pasteBox').value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  let added=0,skipped=0;
+  for(const l of lines){
+    if(state.students.length>=MAX_STUDENTS){skipped++;continue;}
+    const parts=l.split(/\t|;/).map(p=>p.trim());
+    const id=parts.length>1?parts[0]:'', name=parts.length>1?parts.slice(1).join(' '):parts[0];
+    state.students.push({id:id.slice(0,20),name:name.slice(0,80),g:['','','','']});added++;
+  }
+  if(added){$('#pasteBox').value='';save();buildRows();}
+  const nt=$('#notice');
+  if(skipped){nt.classList.add('badtxt');nt.textContent='Se agregaron '+added+' estudiantes. '+skipped+' no cupieron: el máximo es '+MAX_STUDENTS+'.';}
+});
+
+function fillMeta(){
+  $('#m-course').value=state.meta.course;$('#m-teacher').value=state.meta.teacher;
+  $('#m-group').value=state.meta.group;$('#m-period').value=state.meta.period;
+  $('#m-dec').value=String(dec());
+}
+[['#m-course','course'],['#m-teacher','teacher'],['#m-group','group'],['#m-period','period']].forEach(([sel,k])=>{
+  $(sel).addEventListener('input',e=>{state.meta[k]=e.target.value;save();});
+});
+$('#m-dec').addEventListener('change',e=>{state.meta.decimals=+e.target.value;save();updateAll();});
+
+function csvCell(x){x=String(x==null?'':x);return /[;"\r\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x;}
+$('#btnCsv').addEventListener('click',()=>{
+  const d=dec();
+  const rows=[['Código','Nombre',...WEIGHTS.map(c=>c.label+' ('+c.w+'%)'),'Definitiva','Estado']];
+  state.students.forEach(st=>{
+    const c=compute(st,d);
+    rows.push([st.id,st.name,...st.g.map(g=>String(g).trim().replace('.',',')),c.def===null?'':fmt(c.def,d),c.label]);
+  });
+  const csv='﻿'+rows.map(r=>r.map(csvCell).join(';')).join('\r\n');
+  const slug=(state.meta.course||'curso').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'curso';
+  const name='notas-'+slug+(state.meta.group?'-g'+state.meta.group.toLowerCase().replace(/[^a-z0-9]+/g,''):'')+'.csv';
+  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+$('#btnPrint').addEventListener('click',()=>window.print());
+window.addEventListener('beforeprint',()=>{$('#printDate').textContent='Generada el '+new Date().toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'});});
+
+buildHead();fillMeta();buildRows();
+</script>
+</body>
+</html>
